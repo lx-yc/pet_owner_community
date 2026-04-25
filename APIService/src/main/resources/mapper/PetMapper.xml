@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.mapper.PetMapper">
+    <select id="getUserPetList" resultType="petVO">
+        SELECT
+            *
+        FROM pet
+        WHERE
+        user_id = #{query.userId}  <!-- 只查自己的 -->
+
+        <!-- 游标：只靠 id，最简单、最高效 -->
+        <if test="query.cursorId != null">
+            AND id &lt; #{query.cursorId}
+        </if>
+
+        ORDER BY id DESC  <!-- id大=最新 -->
+        LIMIT #{query.pageSize}
+    </select>
+
+    <insert id="insertPet">
+        INSERT INTO pet (user_id, name, type, birthday, age, avatar, info)
+        VALUES (#{pet.userId}, #{pet.name}, #{pet.type}, #{pet.birthday}, #{pet.age}, #{pet.avatar}, #{pet.info})
+    </insert>
+
+    <update id="updatePet">
+        -- //有值才更新
+        UPDATE pet
+        SET
+        <if test="pet.name != null">
+            name = #{pet.name},
+        </if>
+        <if test="pet.type != null">
+            type = #{pet.type},
+        </if>
+        <if test="pet.birthday != null">
+            birthday = #{pet.birthday},
+        </if>
+        <if test="pet.age != null">
+            age = #{pet.age},
+        </if>
+        <if test="pet.avatar != null">
+            avatar = #{pet.avatar},
+        </if>
+        <if test="pet.info != null">
+            info = #{pet.info}
+        </if>
+        WHERE id = #{pet.id}
+    </update>
+
+    <select id="selectById" resultType="pet">
+        SELECT * FROM pet WHERE id = #{id}
+    </select>
+
+<!--    deleteById-->
+    <delete id="deleteById">
+        DELETE FROM pet WHERE id = #{id}
+    </delete>
+</mapper>

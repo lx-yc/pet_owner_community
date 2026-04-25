@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.mapper.NotificationMapper">
+<!--    // 插入-->
+<!--    int insert(Notification record);-->
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+
+        INSERT INTO notification (user_id, from_user_id, type, post_id, comment_id, content, is_read)
+        VALUES (#{userId},
+        #{fromUserId},
+        #{type},
+        <!-- 正确写法 ↓ 这一行不动 -->
+        IFNULL(#{postId}, 0),
+
+        <!-- 关键在这里 ↓ 只改这一行 -->
+        IF(#{type} IN (1,2,5), 0, IFNULL(#{commentId}, 0)),
+        #{content},
+        #{isRead}) ON DUPLICATE KEY
+        UPDATE
+        create_time = CURRENT_TIMESTAMP, -- 重复 → 刷新创建时间
+        is_read = 0, -- 重复 → 标记为未读（最新提醒）
+        content =
+        VALUES (content); -- 重复 → 同步最新内容
+    </insert>
+
+<!--    //消息已读-->
+    <update id="updateRead">
+        UPDATE notification
+        SET is_read = 1
+        WHERE user_id = #{userId}
+    </update>
+
+<!--    //查询消息通知-->
+    <select id="selectByUserId" resultType="notification">
+        SELECT *
+        FROM notification
+        WHERE user_id = #{userId} AND is_read = 0
+        ORDER BY create_time DESC
+    </select>
+</mapper>

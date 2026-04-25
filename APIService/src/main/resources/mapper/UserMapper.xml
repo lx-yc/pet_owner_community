@@ -1,0 +1,189 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.mapper.UserMapper">
+    <select id="selectByUsername" resultType="user">
+        SELECT id,
+               username,
+               password,
+               nickname,
+               avatar,
+               role,
+               status,
+               signature,
+               level,
+               points,
+               follow_count,
+               fans_count,
+               like_count,
+               mood_status,
+               mental_tag
+
+        FROM user
+        WHERE username = #{username}
+    </select>
+
+    <insert id="register" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO user (username, password, nickname)
+        VALUES (#{username}, #{password}, #{nickname})
+    </insert>
+
+    <select id="selectById">
+        SELECT username,
+               nickname,
+               avatar,
+               role
+        FROM user
+        WHERE id = #{id}
+    </select>
+
+<!--    // 根据用户id查询用户-->
+    <select id="selectUserById" resultType="userVO">
+        SELECT id,
+               nickname,
+               avatar,
+               signature,
+               role,
+               status,
+               follow_count,
+               fans_count,
+               like_count,
+               mood_status,
+               mental_tag
+        FROM user where id = #{userId}
+    </select>
+
+<!--    // 根据用户id查询用户头像和昵称-->
+    <select id="selectUserPostById">
+        SELECT nickname,
+               avatar
+        FROM user
+        WHERE id = #{userId}
+    </select>
+
+    <!-- 查询列表 -->
+    <select id="getUserList" resultType="user">
+        SELECT * FROM user
+        WHERE role = 'user'
+        <if test="keyword != null and keyword != ''">
+            AND (username LIKE CONCAT('%',#{keyword},'%')
+            OR nickname LIKE CONCAT('%',#{keyword},'%'))
+        </if>
+        ORDER BY id ASC
+        LIMIT #{offset}, #{size}
+    </select>
+
+    <!-- 查询总数 -->
+    <select id="getUserCount" resultType="java.lang.Long">
+        SELECT COUNT(*) FROM user
+        WHERE role = 'user'
+        <if test="keyword != null and keyword != ''">
+            AND (username LIKE CONCAT('%',#{keyword},'%')
+            OR nickname LIKE CONCAT('%',#{keyword},'%'))
+        </if>
+    </select>
+
+
+    <update id="updateById">
+        UPDATE user
+        <set>
+            <!-- 昵称：有值才更新 -->
+            <if test="nickname != null">
+                nickname = #{nickname},
+            </if>
+
+            <!-- 头像：有值才更新 -->
+            <if test="avatar != null">
+                avatar = #{avatar},
+            </if>
+
+            <!-- 签名：有值才更新 -->
+            <if test="signature != null">
+                signature = #{signature},
+            </if>
+
+            <!-- 手机：有值才更新 -->
+            <if test="phone != null">
+                phone = #{phone},
+            </if>
+
+            <!-- 邮箱：有值才更新 -->
+            <if test="email != null">
+                email = #{email},
+            </if>
+
+            <!-- 心情状态：有值才更新 -->
+            <if test="moodStatus != null">
+                mood_status = #{moodStatus},
+            </if>
+
+            <!-- 心理标签：有值才更新 -->
+            <if test="mentalTag != null">
+                mental_tag = #{mentalTag},
+            </if>
+
+            <if test="
+            nickname != null
+            or avatar != null
+            or signature != null
+            or phone != null
+            or email != null
+            or moodStatus != null
+            or mentalTag != null
+            ">
+                update_time = NOW()
+            </if>
+        </set>
+        WHERE id = #{id}
+    </update>
+
+    <!--    //关注数+1-->
+    <update id="increaseFollowCount">
+        UPDATE user
+        SET follow_count = follow_count + 1
+        WHERE id = #{userId}
+    </update>
+
+    <!--    //关注数-1-->
+    <update id="decreaseFollowCount">
+        UPDATE user
+        SET follow_count = follow_count - 1
+        WHERE id = #{userId}
+    </update>
+
+<!--    //获赞数+1-->
+<!--    int increaseLikeCount(Long userId);-->
+    <update id="increaseLikeCount">
+        UPDATE user
+        SET like_count = like_count + 1
+        WHERE id = #{userId}
+    </update>
+
+<!--    //获赞数-1-->
+<!--    int decreaseLikeCount(Long userId);-->
+    <update id="decreaseLikeCount">
+        UPDATE user
+        SET like_count = like_count - 1
+        WHERE id = #{userId}
+    </update>
+
+<!--    //粉丝数+1-->
+<!--    int increaseFansCount(Long userId);-->
+    <update id="increaseFansCount">
+        UPDATE user
+        SET fans_count = fans_count + 1
+        WHERE id = #{userId}
+    </update>
+
+<!--    //粉丝数-1-->
+<!--    int decreaseFansCount(Long userId);-->
+    <update id="decreaseFansCount">
+        UPDATE user
+        SET fans_count = fans_count - 1
+        WHERE id = #{userId}
+    </update>
+
+    <!--    adminUpdateUserById-->
+
+</mapper>
