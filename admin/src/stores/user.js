@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 
 export const useUserStore = defineStore('user', () => {
     // 安全读取 localStorage
@@ -19,6 +19,20 @@ export const useUserStore = defineStore('user', () => {
 
     // 计算属性
     const isLoggedIn = computed(() => !!token.value)
+
+    // storage 事件处理函数（用于跨标签页同步）
+    const handleStorageChange = (e) => {
+        if (e.key === 'userInfo') {
+            try {
+                userInfo.value = e.newValue ? JSON.parse(e.newValue) : null
+            } catch {
+                userInfo.value = null
+            }
+        }
+        if (e.key === 'token') {
+            token.value = e.newValue || ''
+        }
+    }
 
     // 登录成功
     function setLoginSuccess(data) {
@@ -74,6 +88,7 @@ export const useUserStore = defineStore('user', () => {
         setLoginSuccess,
         logout,
         updateUserInfo,
-        $reset // 必须返回
+        $reset, // 必须返回
+        handleStorageChange // 导出 storage 事件处理函数
     }
 })

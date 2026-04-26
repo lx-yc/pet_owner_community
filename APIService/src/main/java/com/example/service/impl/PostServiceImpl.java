@@ -18,6 +18,7 @@ import com.example.mapper.PostMapper;
 import com.example.mapper.UserMapper;
 import com.example.rabbitMQ.NoticeProducer;
 import com.example.service.PostService;
+import com.example.service.UploadService;
 import com.example.utils.BeanConvertUtils;
 import com.example.utils.GlobalCheckUtil;
 import com.example.utils.SeasonUtils;
@@ -40,6 +41,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 @Service
 @Transactional
 public class PostServiceImpl implements PostService {
@@ -57,6 +61,9 @@ public class PostServiceImpl implements PostService {
 
     @Resource
     private NoticeProducer noticeProducer;
+
+    @Resource
+    private UploadService uploadService;
 
     @Override
     public PostVO getPostById(Long postId) {
@@ -181,6 +188,23 @@ public class PostServiceImpl implements PostService {
         Post post = postMapper.selectById(postId);
         GlobalCheckUtil.checkNotNull(post, ResultCode.POST_NOT_EXIST);
         GlobalCheckUtil.checkOwner(post.getUserId(), userId, ResultCode.POST_NO_PERMISSION);
+
+        if (post.getImages() != null && !post.getImages().isEmpty()) {
+            try {
+                ObjectMapper objectMapper = new ObjectMapper();
+                List<String> imageUrls = objectMapper.readValue(post.getImages(), new TypeReference<List<String>>() {});
+                
+                for (String imageUrl : imageUrls) {
+                    try {
+                        uploadService.deleteImage(imageUrl);
+                    } catch (Exception e) {
+                        System.err.println("删除OSS图片失败: " + imageUrl + ", 错误: " + e.getMessage());
+                    }
+                }
+            } catch (Exception e) {
+                System.err.println("解析帖子图片列表失败: " + e.getMessage());
+            }
+        }
 
         int rows = postMapper.deleteById(postId);
         GlobalCheckUtil.checkRowAffect(rows, ResultCode.POST_DELETE_FAILED);

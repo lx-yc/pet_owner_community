@@ -259,7 +259,7 @@ const handleAvatarChange = async (e) => {
 
     try {
         ElMessage.info('上传中...');
-        const res = await uploadImageApi(file);
+        const res = await uploadImageApi(file, 'avatar');
         if (res.code === 0) {
             formData.avatar = res.data;
             ElMessage.success('头像上传成功');

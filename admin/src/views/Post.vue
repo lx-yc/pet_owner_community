@@ -36,6 +36,35 @@
                                 {{ post.type === 'OFFICIAL' ? '官方' : '分享' }}
                             </span>
                         </div>
+                        
+                        <!-- 三个圆点菜单按钮（仅当前用户的帖子显示） -->
+                        <div v-if="currentUserId === post.userId" class="post-menu-wrapper">
+                            <button class="post-menu-btn" @click.stop="togglePostMenu">
+                                <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+                                    <circle cx="6" cy="12" r="2"></circle>
+                                    <circle cx="12" cy="12" r="2"></circle>
+                                    <circle cx="18" cy="12" r="2"></circle>
+                                </svg>
+                            </button>
+                            
+                            <!-- 下拉菜单 -->
+                            <div v-show="showPostMenu" class="post-menu-dropdown" @click.stop>
+                                <div class="menu-item" @click="handleEditPost">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                    </svg>
+                                    <span>编辑</span>
+                                </div>
+                                <div class="menu-item delete-item" @click="handleDeletePost">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="3 6 5 6 21 6"></polyline>
+                                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                    </svg>
+                                    <span>删除</span>
+                                </div>
+                            </div>
+                        </div>
                     </header>
 
                     <!-- 封面图/图片列表 -->
@@ -344,6 +373,18 @@
                 </div>
             </div>
         </transition>
+
+        <!-- 删除确认框 -->
+        <ConfirmDialog
+            :visible="deleteDialogVisible"
+            title="删除确认"
+            message="确定要删除这篇帖子吗？此操作不可撤销。"
+            type="danger"
+            confirm-text="确定"
+            cancel-text="取消"
+            @confirm="handleDeleteConfirm"
+            @cancel="handleDeleteCancel"
+        />
     </div>
 </template>
 
@@ -352,12 +393,13 @@ import { ref, onMounted, computed, onUnmounted, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import { useAppStore } from '../stores/app'
-import { getPostByIdApi, likePostApi, collectPostApi } from '../api/post.js'
+import { getPostByIdApi, likePostApi, collectPostApi, deletePostApi } from '../api/post.js'
 import { ElMessage } from 'element-plus'
 import { getTopCommentsApi, getReplyCommentsApi, likeCommentApi, insertCommentApi } from '../api/comment.js'
 import NotificationDropdown from '../components/NotificationDropdown.vue'
 import UserAvatarDropdown from '../components/UserAvatarDropdown.vue'
 import TopNavbar from '../components/TopNavbar.vue'
+import ConfirmDialog from '../components/ConfirmDialog.vue'
 
 // 评论相关状态
 const topComments = ref([])
@@ -366,6 +408,10 @@ const loadingTop = ref(false)
 const loadingReplies = ref(false)
 const hasMoreTop = ref(true)
 const hasMoreReplies = ref({})
+
+// 帖子菜单相关状态
+const showPostMenu = ref(false)
+const deleteDialogVisible = ref(false)
 
 // --- 滚动与固定输入框相关 ---
 const sentinelRef = ref(null)
@@ -1001,6 +1047,69 @@ const scrollToComments = () => {
     }
 }
 
+// 切换帖子菜单显示状态
+const togglePostMenu = () => {
+    showPostMenu.value = !showPostMenu.value
+}
+
+// 处理编辑帖子
+const handleEditPost = () => {
+    if (!userStore.isLoggedIn) {
+        appStore.openLoginModal()
+        ElMessage.warning('请先登录')
+        return
+    }
+    showPostMenu.value = false
+    window.open(`/submit?edit=${post.value.id}`, '_blank')
+}
+
+// 处理删除帖子
+const handleDeletePost = () => {
+    if (!userStore.isLoggedIn) {
+        appStore.openLoginModal()
+        ElMessage.warning('请先登录')
+        return
+    }
+    showPostMenu.value = false
+    deleteDialogVisible.value = true
+}
+
+// 确认删除帖子
+const handleDeleteConfirm = async () => {
+    if (!post.value) return
+    
+    try {
+        const res = await deletePostApi(post.value.id)
+        if (res.code === 0) {
+            ElMessage.success('帖子删除成功')
+            // 删除成功后跳转到首页或用户主页
+            window.open('/personalHome', '_self')
+        } else {
+            ElMessage.error(res.message || '删除失败')
+        }
+    } catch (error) {
+        console.error('删除帖子失败:', error)
+        ElMessage.error('网络错误，删除失败')
+    } finally {
+        deleteDialogVisible.value = false
+    }
+}
+
+// 取消删除
+const handleDeleteCancel = () => {
+    deleteDialogVisible.value = false
+}
+
+// 点击其他地方关闭菜单
+const handleClickOutsideMenu = (event) => {
+    if (showPostMenu.value) {
+        const menuWrapper = document.querySelector('.post-menu-wrapper')
+        if (menuWrapper && !menuWrapper.contains(event.target)) {
+            showPostMenu.value = false
+        }
+    }
+}
+
 // 【新增】执行滚动的函数
 const checkAndScrollToComments = async () => {
     // 检查路由查询参数
@@ -1113,6 +1222,7 @@ onMounted(() => {
         });
 
         document.addEventListener('click', handleClickOutside);
+        document.addEventListener('click', handleClickOutsideMenu);
 
         checkAndScrollToComments()
     }
@@ -1129,8 +1239,9 @@ onUnmounted(() => {
     }
     window.removeEventListener('visibilitychange', handleVisibilityChange)
     window.removeEventListener('scroll', handleScroll);
-    window.removeEventListener('resize', handleScroll); // 记得移除 resize 监听
+    window.removeEventListener('resize', handleScroll);
     document.removeEventListener('click', handleClickOutside);
+    document.removeEventListener('click', handleClickOutsideMenu);
 })
 </script>
 
@@ -1370,6 +1481,94 @@ onUnmounted(() => {
     background: linear-gradient(135deg, #f093fb, #f5576c);
     color: white;
     box-shadow: 0 3px 8px rgba(245, 87, 108, 0.3);
+}
+
+.post-menu-wrapper {
+    position: absolute;
+    top: 0;
+    right: 0;
+    z-index: 10;
+}
+
+.post-menu-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border: none;
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(118, 75, 162, 0.1));
+    border-radius: 50%;
+    cursor: pointer;
+    color: #667eea;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.post-menu-btn:hover {
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.2), rgba(118, 75, 162, 0.2));
+    transform: scale(1.1);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.post-menu-btn:active {
+    transform: scale(0.95);
+}
+
+.post-menu-dropdown {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+    padding: 8px;
+    min-width: 140px;
+    z-index: 1000;
+    animation: dropdownFadeIn 0.2s ease;
+}
+
+@keyframes dropdownFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.menu-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    color: #374151;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.menu-item:hover {
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(118, 75, 162, 0.1));
+    color: #667eea;
+}
+
+.menu-item svg {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+}
+
+.menu-item.delete-item {
+    color: #ef4444;
+}
+
+.menu-item.delete-item:hover {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(220, 38, 38, 0.1));
+    color: #dc2626;
 }
 
 .post-images-wrapper {
@@ -2383,6 +2582,25 @@ onUnmounted(() => {
     .post-author-avatar {
         width: 44px;
         height: 44px;
+    }
+
+    .post-menu-btn {
+        width: 32px;
+        height: 32px;
+    }
+
+    .post-menu-dropdown {
+        min-width: 120px;
+    }
+
+    .menu-item {
+        padding: 8px 10px;
+        font-size: 0.85rem;
+    }
+
+    .menu-item svg {
+        width: 16px;
+        height: 16px;
     }
 
     .replies-section {

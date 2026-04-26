@@ -12,10 +12,22 @@
 </template>
 
 <script setup>
+import { onMounted, onUnmounted } from 'vue'
 import { useAppStore } from './stores/app.js'
+import { useUserStore } from './stores/user.js'
 import LoginModal from './components/LoginModal.vue'
 
 const appStore = useAppStore()
+const userStore = useUserStore()
+
+// 监听 storage 事件，实现跨标签页同步用户信息
+onMounted(() => {
+    window.addEventListener('storage', userStore.handleStorageChange)
+})
+
+onUnmounted(() => {
+    window.removeEventListener('storage', userStore.handleStorageChange)
+})
 
 // 【必须补充】处理游客访问的回调
 const handleGuestAccess = () => {

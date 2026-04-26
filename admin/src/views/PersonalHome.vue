@@ -13,8 +13,9 @@
                         <div class="submit-icon-wrapper" @click="handleSubmitPost">
                             <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" stroke-width="2"
                                 fill="none" stroke-linecap="round" stroke-linejoin="round" class="submit-svg">
-                                <path d="M12 20h9"></path>
-                                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="17 8 12 3 7 8"></polyline>
+                                <line x1="12" y1="3" x2="12" y2="15"></line>
                             </svg>
                         </div>
                     </template>
@@ -423,9 +424,16 @@ watch(() => route.params.id, () => {
     initPageData();
 });
 
-// 监听 userStore.userInfo 变化，实时更新个人主页的关注数和粉丝数
+// 监听 userStore.userInfo 变化，实时更新个人主页的所有用户信息（包括头像、昵称等）
 watch(() => userStore.userInfo, (newUserInfo) => {
     if (isSelf.value && newUserInfo) {
+        userInfo.id = newUserInfo.id;
+        userInfo.nickname = newUserInfo.nickname || '宠友用户';
+        userInfo.avatar = newUserInfo.avatar || defaultAvatar;
+        userInfo.signature = newUserInfo.signature || '这个人很懒，什么都没写~';
+        userInfo.moodStatus = newUserInfo.moodStatus || '';
+        userInfo.mentalTag = newUserInfo.mentalTag || '';
+        
         stats.fansCount = newUserInfo.fansCount || 0;
         stats.followCount = newUserInfo.followCount || 0;
         stats.likeCount = newUserInfo.likeCount || 0;
@@ -1287,10 +1295,11 @@ onUnmounted(() => {
     left: 100%;
 }
 
-/* 响应式设计 */
+
+
 @media screen and (max-width: 768px) {
     .personal-home-container {
-        padding: 0;
+        padding-top: 60px;
     }
 
     .navbar-content {

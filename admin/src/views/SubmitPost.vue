@@ -5,7 +5,7 @@
             <div class="gradient-orb orb-2"></div>
             <div class="gradient-orb orb-3"></div>
         </div>
-        
+
         <TopNavbar :show-nav-links="false" :show-search="false">
             <template #actions>
                 <button class="btn-submit" @click="handleSubmit" :disabled="submitting">
@@ -23,13 +23,15 @@
                 <div class="form-body">
                     <div class="form-item">
                         <label class="form-label">标题</label>
-                        <input v-model="form.title" type="text" class="form-input" placeholder="请输入帖子标题" maxlength="50" />
+                        <input v-model="form.title" type="text" class="form-input" placeholder="请输入帖子标题"
+                            maxlength="50" />
                         <span class="char-count">{{ form.title.length }}/50</span>
                     </div>
 
                     <div class="form-item">
                         <label class="form-label">内容</label>
-                        <textarea v-model="form.content" class="form-textarea" placeholder="分享你的想法..." rows="8" maxlength="2000"></textarea>
+                        <textarea v-model="form.content" class="form-textarea" placeholder="分享你的想法..." rows="8"
+                            maxlength="2000"></textarea>
                         <span class="char-count">{{ form.content.length }}/2000</span>
                     </div>
 
@@ -56,26 +58,19 @@
                                     </div>
                                 </TransitionGroup>
                             </div>
-                            
+
                             <div class="available-tags-section">
                                 <div v-if="selectedTags.length > 0" class="section-label">点击添加更多标签</div>
                                 <TransitionGroup name="tag-fade" tag="div" class="available-tags-list">
-                                    <div v-for="tag in filteredAvailableTags" :key="tag" 
-                                         class="tag-option" 
-                                         @click="addTag(tag)">
+                                    <div v-for="tag in filteredAvailableTags" :key="tag" class="tag-option"
+                                        @click="addTag(tag)">
                                         {{ tag }}
                                     </div>
                                 </TransitionGroup>
                                 <div v-if="isEditingTag" class="tag-input-wrapper">
-                                    <input v-model="customTagInput" 
-                                           type="text" 
-                                           class="tag-input"
-                                           placeholder="输入标签" 
-                                           maxlength="4" 
-                                           @blur="finishEditTag" 
-                                           @keyup.enter="finishEditTag"
-                                           @keyup.escape="cancelEditTag"
-                                           ref="tagInputRef" />
+                                    <input v-model="customTagInput" type="text" class="tag-input" placeholder="输入标签"
+                                        maxlength="4" @blur="finishEditTag" @keyup.enter="finishEditTag"
+                                        @keyup.escape="cancelEditTag" ref="tagInputRef" />
                                 </div>
                                 <div v-else class="tag-option tag-add" @click="startEditTag">
                                     + 自定义
@@ -102,8 +97,8 @@
                                     <div class="image-remove" @click="removeImage(index)">×</div>
                                 </div>
                                 <div v-if="imageList.length < 9" class="image-upload-btn" @click="triggerUpload">
-                                    <svg viewBox="0 0 24 24" width="32" height="32" stroke="currentColor" stroke-width="2"
-                                        fill="none" stroke-linecap="round" stroke-linejoin="round">
+                                    <svg viewBox="0 0 24 24" width="32" height="32" stroke="currentColor"
+                                        stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
                                         <line x1="12" y1="5" x2="12" y2="19"></line>
                                         <line x1="5" y1="12" x2="19" y2="12"></line>
                                     </svg>
@@ -125,7 +120,7 @@
 import { ref, reactive, onMounted, computed, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { insertPostApi, getPostByIdApi, updatePostApi } from '../api/post'
-import { uploadImageApi } from '../api/upload'
+import { uploadImageApi, deleteImageApi } from '../api/upload'
 import { ElMessage } from 'element-plus'
 import TopNavbar from '../components/TopNavbar.vue'
 
@@ -148,6 +143,7 @@ const form = reactive({
 
 const imageList = ref([])
 const imageFiles = ref([])
+const originalImages = ref([])
 const selectedTags = ref([])
 const isEditingTag = ref(false)
 const customTagInput = ref('')
@@ -255,19 +251,28 @@ const handleSubmit = async () => {
 
     try {
         let imageUrls = []
+
+        // 编辑模式下，先获取原有图片（服务器URL，非blob）
+        if (isEditing.value && imageList.value.length > 0) {
+            imageUrls = imageList.value.filter(url => !url.startsWith('blob:'))
+        }
+
+        // 如果有新上传的图片，上传后追加到列表
         if (imageFiles.value.length > 0) {
-            ElMessage.info('正在上传图片...')
-            const uploadPromises = imageFiles.value.map(file => uploadImageApi(file))
+            // ElMessage.info('正在上传图片...')
+            const uploadPromises = imageFiles.value.map(file => uploadImageApi(file, 'post'))
             const uploadResults = await Promise.all(uploadPromises)
-            imageUrls = uploadResults.map(res => {
+            const newImageUrls = uploadResults.map(res => {
                 if (res.code === 0) {
                     return res.data
                 } else {
                     throw new Error(res.message || '图片上传失败')
                 }
             })
-        } else if (imageList.value.length > 0) {
-            // 保留原有的图片
+            // 合并原有图片和新上传的图片
+            imageUrls = [...imageUrls, ...newImageUrls]
+        } else if (!isEditing.value && imageList.value.length > 0) {
+            // 非编辑模式下，直接使用 imageList 中的图片
             imageUrls = imageList.value
         }
 
@@ -281,28 +286,29 @@ const handleSubmit = async () => {
             season: '',
             images: imageUrls.length > 0 ? JSON.stringify(imageUrls) : ''
         }
-        
+
         console.log('Post data:', postData)
-        
+
         if (isEditing.value) {
             await updatePostApi(postData)
+
+            const deletedImages = originalImages.value.filter(
+                url => !imageUrls.includes(url)
+            )
+
+            if (deletedImages.length > 0) {
+                const deletePromises = deletedImages.map(url => deleteImageApi(url))
+                await Promise.all(deletePromises)
+            }
+
             ElMessage.success('更新成功')
         } else {
             await insertPostApi(postData)
             ElMessage.success('发布成功')
         }
-        
-        // 编辑成功后关闭窗口
-        if (isEditing.value) {
-            window.close()
-        } else {
-            // 发布成功后清空表单
-            imageUrls = []
-            imageList.value = []
-            imageFiles.value = []
-            selectedTags.value = []
-            form.tags = ''
-        }
+
+        // 成功后关闭窗口
+        window.close()
     } catch (error) {
         console.error(isEditing.value ? '更新失败:' : '发布失败:', error)
         ElMessage.error(isEditing.value ? '更新失败，请重试' : '发布失败，请重试')
@@ -316,7 +322,7 @@ onMounted(async () => {
     setTimeout(() => {
         isMounted.value = true
     }, 100)
-    
+
     // 检测 URL 参数，判断是否为编辑模式
     const urlParams = new URLSearchParams(window.location.search)
     const editParam = urlParams.get('edit')
@@ -340,18 +346,19 @@ const loadPostDetail = async (id) => {
             form.tags = post.tags || '日常'
             form.isAnonymous = post.isAnonymous || 0
             form.season = post.season || ''
-            
+
             // 处理标签
             if (post.tags) {
                 selectedTags.value = post.tags.split(',').filter(tag => tag.trim())
             }
-            
+
             // 处理图片
             if (post.images) {
                 try {
                     const images = JSON.parse(post.images)
                     if (Array.isArray(images)) {
                         imageList.value = images
+                        originalImages.value = [...images]
                     }
                 } catch (error) {
                     console.error('解析图片失败:', error)
@@ -420,12 +427,16 @@ const loadPostDetail = async (id) => {
 }
 
 @keyframes orbFloat {
-    0%, 100% {
+
+    0%,
+    100% {
         transform: translate(0, 0) scale(1);
     }
+
     33% {
         transform: translate(30px, -20px) scale(1.1);
     }
+
     66% {
         transform: translate(-20px, 20px) scale(0.9);
     }
@@ -512,7 +523,7 @@ const loadPostDetail = async (id) => {
     -webkit-backdrop-filter: blur(24px) saturate(180%);
     border: 1px solid rgba(255, 255, 255, 0.3);
     border-radius: 20px;
-    box-shadow: 
+    box-shadow:
         0 1px 3px rgba(0, 0, 0, 0.04),
         0 8px 16px rgba(0, 0, 0, 0.02),
         0 4px 20px rgba(102, 126, 234, 0.05);
@@ -528,10 +539,11 @@ const loadPostDetail = async (id) => {
         transform: translateY(30px) scale(0.95);
         box-shadow: 0 0 0 rgba(0, 0, 0, 0);
     }
+
     100% {
         opacity: 1;
         transform: translateY(0) scale(1);
-        box-shadow: 
+        box-shadow:
             0 1px 3px rgba(0, 0, 0, 0.04),
             0 8px 16px rgba(0, 0, 0, 0.02),
             0 4px 20px rgba(102, 126, 234, 0.05);
@@ -782,6 +794,7 @@ const loadPostDetail = async (id) => {
         opacity: 0;
         transform: scale(0.8) translateY(-10px);
     }
+
     100% {
         opacity: 1;
         transform: scale(1) translateY(0);
@@ -793,6 +806,7 @@ const loadPostDetail = async (id) => {
         opacity: 0;
         transform: scale(0.9);
     }
+
     100% {
         opacity: 1;
         transform: scale(1);
@@ -950,6 +964,7 @@ const loadPostDetail = async (id) => {
         opacity: 0;
         transform: scale(0.8) rotate(-5deg);
     }
+
     100% {
         opacity: 1;
         transform: scale(1) rotate(0deg);
@@ -1073,7 +1088,9 @@ const loadPostDetail = async (id) => {
 @media screen and (max-width: 480px) {
     .form-container {
         padding: 0 12px;
-        margin: 16px auto;
+        /* margin: 16px auto; */
+
+        margin: 60px auto 48px;
     }
 
     .form-body {

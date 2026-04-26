@@ -94,7 +94,7 @@
                         宠物头像
                     </label>
                     <div class="avatar-upload">
-                        <div class="avatar-preview" :class="{ 'has-image': avatarPreview }">
+                        <div class="avatar-preview" @click="triggerFileInput" :class="{ 'has-image': avatarPreview }">
                             <img v-if="avatarPreview" :src="avatarPreview" alt="头像预览" />
                             <div v-else class="avatar-placeholder">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -239,7 +239,7 @@ const handleFileChange = async (event) => {
     try {
         uploading.value = true
 
-        const result = await uploadImageApi(file)
+        const result = await uploadImageApi(file, 'pet')
 
         if (result.code === 0) {
             avatarPreview.value = result.data

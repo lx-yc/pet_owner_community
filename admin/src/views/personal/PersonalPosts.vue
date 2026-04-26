@@ -4,8 +4,17 @@
         <div class="posts-grid" v-if="posts.length > 0">
             <div v-for="post in posts" :key="post.id" class="post-item">
                 <div class="image-wrapper" @click="handlePostClick(post)">
-                    <img :src="post.images && post.images.length > 0 ? JSON.parse(post.images)[0] : 'https://via.placeholder.com/300x300?text=No+Image'"
-                        alt="帖子图片" class="post-image" loading="lazy" />
+                    <template v-if="post.images && post.images !== '' && JSON.parse(post.images || '[]').length > 0">
+                        <img :src="JSON.parse(post.images)[0]"
+                            alt="帖子图片" class="post-image" loading="lazy" />
+                    </template>
+                    <template v-else>
+                        <div class="no-image-placeholder">
+                            <div class="placeholder-content">
+                                <p class="placeholder-text">{{ post.content ? post.content.substring(0, 80) + (post.content.length > 80 ? '...' : '') : '暂无内容' }}</p>
+                            </div>
+                        </div>
+                    </template>
                     <div v-if="!isOtherUser" class="view-count-badge">
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
                             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -94,6 +103,13 @@ const loading = ref(false)
 const deleteDialogVisible = ref(false)
 const currentPost = ref(null)
 let observer = null
+
+const handleVisibilityChange = () => {
+    if (!document.hidden) {
+        resetList()
+        fetchPosts()
+    }
+}
 
 const checkAuth = () => {
     if (!userStore.isLoggedIn) {
@@ -272,12 +288,14 @@ const unwatchRoute = route.params.id ? null : null
 onMounted(() => {
     fetchPosts()
     setupObserver()
+    window.addEventListener('visibilitychange', handleVisibilityChange)
 })
 
 onUnmounted(() => {
     if (observer) {
         observer.disconnect()
     }
+    window.removeEventListener('visibilitychange', handleVisibilityChange)
 })
 </script>
 
@@ -331,6 +349,62 @@ onUnmounted(() => {
     object-fit: cover;
     display: block;
     transition: transform 0.3s ease;
+}
+
+.no-image-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    position: relative;
+    overflow: hidden;
+}
+
+.no-image-placeholder::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, transparent 70%);
+    animation: pulse 4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        transform: scale(1);
+        opacity: 0.5;
+    }
+    50% {
+        transform: scale(1.1);
+        opacity: 0.8;
+    }
+}
+
+.placeholder-content {
+    position: relative;
+    z-index: 1;
+    padding: 20px;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+}
+
+.placeholder-text {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.95);
+    text-align: center;
+    line-height: 1.6;
+    word-break: break-all;
+    margin: 0;
+    font-weight: 500;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 /* 悬停时图片轻微放大 */
@@ -424,6 +498,17 @@ onUnmounted(() => {
     flex-direction: column;
     gap: 8px;
     z-index: 10;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+/* PC端悬停时显示操作按钮 */
+@media (hover: hover) {
+    .post-item:hover .post-actions {
+        opacity: 1;
+        visibility: visible;
+    }
 }
 
 /* 编辑按钮 */
