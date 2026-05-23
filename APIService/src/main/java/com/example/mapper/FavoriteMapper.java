@@ -22,4 +22,7 @@ public interface FavoriteMapper {
 
     // 获取用户收藏的帖子ID列表（游标分页）
     List<Long> selectCollectedPostIdsByUserId(@Param("userId") Long userId, @Param("lastId") Long lastId, @Param("pageSize") Integer pageSize);
+
+    // 获取用户所有收藏的帖子ID列表（用于登录时加载到Redis）
+    List<Long> selectAllCollectedPostIdsByUserId(@Param("userId") Long userId);
 }

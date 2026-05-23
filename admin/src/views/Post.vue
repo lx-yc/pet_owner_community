@@ -123,7 +123,7 @@
                             </div>
 
                             <div class="stat-item like-item" :class="{ 'active': post && post.isLiked }"
-                                @click="handleLike">
+                                @click="debouncedHandleLike">
                                 <svg viewBox="0 0 24 24" :fill="post && post.isLiked ? 'currentColor' : 'none'"
                                     stroke="currentColor" stroke-width="2">
                                     <path
@@ -144,7 +144,7 @@
                             </div>
 
                             <div class="stat-item collect-item" :class="{ 'active': post && post.isCollected }"
-                                @click="handleCollect">
+                                @click="debouncedHandleCollect">
                                 <svg viewBox="0 0 24 24" :fill="post && post.isCollected ? 'currentColor' : 'none'"
                                     stroke="currentColor" stroke-width="2" stroke-linecap="round"
                                     stroke-linejoin="round">
@@ -400,6 +400,7 @@ import NotificationDropdown from '../components/NotificationDropdown.vue'
 import UserAvatarDropdown from '../components/UserAvatarDropdown.vue'
 import TopNavbar from '../components/TopNavbar.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
+import { debounce } from '../utils/debounce.js'
 
 // 评论相关状态
 const topComments = ref([])
@@ -1021,6 +1022,8 @@ const handleLike = async () => {
     }
 }
 
+const debouncedHandleLike = debounce(handleLike, 500)
+
 const handleCollect = async () => {
     if (!post.value) return
     if (!userStore.isLoggedIn) {
@@ -1040,6 +1043,8 @@ const handleCollect = async () => {
         console.error('收藏失败', err)
     }
 }
+
+const debouncedHandleCollect = debounce(handleCollect, 500)
 
 const scrollToComments = () => {
     if (commentsSectionRef.value) {
@@ -1632,6 +1637,10 @@ onUnmounted(() => {
     transition: transform 0.3s ease-out;
     width: 100%;
     position: relative;
+    touch-action: none;
+    -webkit-touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 .carousel-slide {
@@ -1836,6 +1845,31 @@ onUnmounted(() => {
     background: linear-gradient(135deg, rgba(255, 255, 255, 0.5), rgba(250, 248, 245, 0.5));
     border: 1px solid rgba(0, 0, 0, 0.04);
     cursor: default;
+}
+
+/* 手机端布局：图标在上，数字在下 */
+@media (max-width: 768px) {
+    .stats-row {
+        flex-wrap: wrap;
+    }
+    
+    .stat-item {
+        flex-direction: column;
+        gap: 4px;
+        padding: 12px 8px;
+        min-height: 80px;
+    }
+    
+    .stat-item svg {
+        width: 22px;
+        height: 22px;
+    }
+    
+    .stat-item span {
+        font-size: 0.8rem;
+        text-align: center;
+        line-height: 1.2;
+    }
 }
 
 .stat-item svg {

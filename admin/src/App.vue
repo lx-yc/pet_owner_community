@@ -16,6 +16,7 @@ import { onMounted, onUnmounted } from 'vue'
 import { useAppStore } from './stores/app.js'
 import { useUserStore } from './stores/user.js'
 import LoginModal from './components/LoginModal.vue'
+import { ElMessage } from 'element-plus'
 
 const appStore = useAppStore()
 const userStore = useUserStore()
@@ -23,6 +24,13 @@ const userStore = useUserStore()
 // 监听 storage 事件，实现跨标签页同步用户信息
 onMounted(() => {
     window.addEventListener('storage', userStore.handleStorageChange)
+    
+    // 检测是否有token失效标记，如果有则弹出登录弹窗
+    if (sessionStorage.getItem('token_expired') === '1') {
+        sessionStorage.removeItem('token_expired')
+        ElMessage.warning('登录已失效，请重新登录')
+        appStore.openLoginModal()
+    }
 })
 
 onUnmounted(() => {

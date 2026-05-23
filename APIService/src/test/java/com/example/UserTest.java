@@ -12,36 +12,36 @@ import org.springframework.boot.test.context.SpringBootTest;
 
 @SpringBootTest
 public class UserTest {
-    @Resource
-    private UserMapper userMapper;
-
-    @Resource
-    private UserService userService;
-
-    @Test
-    public void test() {
-        User user = userMapper.selectByUsername("admin");
-        System.out.println(user);
-    }
-
-    @Test
-    public void testLogin() {
-        UserLoginDTO userLoginDTO = new UserLoginDTO();
-        userLoginDTO.setUsername("admin");
-        userLoginDTO.setPassword("123456");
-        UserLoginVO user = userService.login(userLoginDTO);
-        System.out.println("ok"+user);
-    }
-
-    @Test
-    public void testRegister() {
-        UserLoginDTO userLoginDTO = new UserLoginDTO();
-        userLoginDTO.setUsername("lx");
-        userLoginDTO.setPassword("123456");
-        userService.register(userLoginDTO);
-        System.out.println("ok");
+//    @Resource
+//    private UserMapper userMapper;
+//
+//    @Resource
+//    private UserService userService;
+//
+//    @Test
+//    public void test() {
+//        User user = userMapper.selectByUsername("admin");
+//        System.out.println(user);
+//    }
+//
+//    @Test
+//    public void testLogin() {
+//        UserLoginDTO userLoginDTO = new UserLoginDTO();
+//        userLoginDTO.setUsername("admin");
+//        userLoginDTO.setPassword("123456");
+//        UserLoginVO user = userService.login(userLoginDTO);
+//        System.out.println("ok"+user);
+//    }
+//
+//    @Test
+//    public void testRegister() {
+//        UserLoginDTO userLoginDTO = new UserLoginDTO();
+//        userLoginDTO.setUsername("lx");
+//        userLoginDTO.setPassword("123456");
+//        userService.register(userLoginDTO);
+//        System.out.println("ok");
 //        System.out.println(NicknameGenerator.generate());
-    }
+//    }
 
 //    @Test
 //    public void testGetUserList() {

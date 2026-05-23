@@ -13,6 +13,8 @@ import com.example.enums.NotificationType;
 import com.example.enums.ResultCode;
 import com.example.exception.BusinessException;
 import com.example.mapper.FollowMapper;
+import com.example.mapper.FavoriteMapper;
+import com.example.mapper.PostLikeMapper;
 import com.example.mapper.UserMapper;
 import com.example.rabbitMQ.NoticeProducer;
 import com.example.service.UserService;
@@ -32,7 +34,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional
@@ -42,6 +46,12 @@ public class UserServiceImpl implements UserService {
 
     @Resource
     private FollowMapper followMapper;
+
+    @Resource
+    private PostLikeMapper postLikeMapper;
+
+    @Resource
+    private FavoriteMapper favoriteMapper;
 
     @Resource
     private NoticeProducer noticeProducer;
@@ -54,6 +64,8 @@ public class UserServiceImpl implements UserService {
 
     //token常量redis
     private static final String LOGIN_TOKEN_KEY = "login:token:";
+    private static final String USER_LIKED_POSTS_KEY = "user:liked:posts:";
+    private static final String USER_FAVORITED_POSTS_KEY = "user:favorited:posts:";
 
     @Override
     public UserLoginVO login(UserLoginDTO userLoginDTO) {
@@ -74,6 +86,26 @@ public class UserServiceImpl implements UserService {
 
         // 存入 Redis：key = login:token:xxx  value = userId
         redisTemplate.opsForValue().set(LOGIN_TOKEN_KEY + token, user.getId().toString(), 7, TimeUnit.DAYS);
+
+        // 将用户点赞的帖子ID加载到Redis
+        List<Long> likedPostIds = postLikeMapper.selectAllLikedPostIdsByUserId(user.getId());
+        if (likedPostIds != null && !likedPostIds.isEmpty()) {
+            Set<String> likedPostIdStrs = likedPostIds.stream()
+                    .map(String::valueOf)
+                    .collect(Collectors.toSet());
+            redisTemplate.opsForSet().add(USER_LIKED_POSTS_KEY + user.getId(), likedPostIdStrs.toArray());
+            redisTemplate.expire(USER_LIKED_POSTS_KEY + user.getId(), 7, TimeUnit.DAYS);
+        }
+
+        // 将用户收藏的帖子ID加载到Redis
+        List<Long> favoritedPostIds = favoriteMapper.selectAllCollectedPostIdsByUserId(user.getId());
+        if (favoritedPostIds != null && !favoritedPostIds.isEmpty()) {
+            Set<String> favoritedPostIdStrs = favoritedPostIds.stream()
+                    .map(String::valueOf)
+                    .collect(Collectors.toSet());
+            redisTemplate.opsForSet().add(USER_FAVORITED_POSTS_KEY + user.getId(), favoritedPostIdStrs.toArray());
+            redisTemplate.expire(USER_FAVORITED_POSTS_KEY + user.getId(), 7, TimeUnit.DAYS);
+        }
 
         UserLoginVO userLoginVO = BeanConvertUtils.convert(user, UserLoginVO.class);
         userLoginVO.setToken(token);

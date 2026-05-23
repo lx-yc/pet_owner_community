@@ -5,7 +5,8 @@ import { useUserStore } from "../stores/user";
 
 const request = axios.create({
     baseURL: 'http://localhost:8080',
-    timeout: 5000,
+
+    timeout: 60000,
 })
 
 request.interceptors.request.use(
@@ -29,31 +30,69 @@ request.interceptors.request.use(
 // 对应后端返回：未登录 / token过期 / token无效 / 身份异常
 request.interceptors.response.use(
     response => {
-        return response.data
+        // console.log("response---------:", response)
+        const res = response.data
+        const msg = res?.msg || '系统异常'
+        if (res.code === 0) {
+            return res
+        }
+        else {
+            if (
+                msg === '未登录' ||
+                msg === 'token无效' ||
+                msg === '登录已过期，请重新登录！' ||
+                msg === '身份异常，请重新登录' ||
+                msg === 'redis异常，请重新登录' ||
+                msg === '异常，请重新登录！'
+            ) {
+                // 设置标记，用于刷新后弹出登录弹窗
+                sessionStorage.setItem('token_expired', '1')
+                
+                // 清除本地登录信息
+                localStorage.removeItem('token')
+                localStorage.removeItem('userInfo')
+                
+                // 清空 Pinia 状态
+                const userStore = useUserStore();
+                userStore.logout();
+                
+                // 强制刷新当前页面，让页面以游客身份重新加载数据
+                window.location.reload()
+            } else {
+                ElMessage.error(msg || '系统异常')
+            }
+        }
+        // return response.data
     },
     error => {
         const res = error.response || {}
+        // console.log("error---------:", error)
         const msg = res.data?.msg || '请求失败'
-
+        // console.log("msg---------:", msg)
         // 后端返回这些消息 → 清除token + 跳转到登录页
         if (
             msg === '未登录' ||
             msg === 'token无效' ||
             msg === '登录已过期，请重新登录！' ||
-            msg === '身份异常，请重新登录'
+            msg === '身份异常，请重新登录' ||
+            msg === 'redis异常，请重新登录' ||
+            msg === '异常，请重新登录！'
         ) {
+            // 设置标记，用于刷新后弹出登录弹窗
+            sessionStorage.setItem('token_expired', '1')
+            
             ElMessage.error(msg)
-
-            // 👇 在这里加 2 行，让 Pinia 同步清空！
-            const userStore = useUserStore();
-            userStore.logout(); // 🔥 核心：同时清空 Pinia + localStorage
 
             // 清除本地登录信息
             localStorage.removeItem('token')
             localStorage.removeItem('userInfo')
+            
+            // 清空 Pinia 状态
+            const userStore = useUserStore();
+            userStore.logout();
 
-            // 跳转到登录页
-            router.push('/login')
+            // 强制刷新当前页面，让页面以游客身份重新加载数据
+            window.location.reload()
         } else {
             ElMessage.error(msg || '系统异常')
         }

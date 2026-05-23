@@ -3,7 +3,7 @@
     <div class="notification-wrapper">
 
         <!-- 触发按钮 -->
-        <div class="trigger-btn" @click="togglePanel" @mouseenter="handleTriggerEnter" @mouseleave="handleTriggerLeave"
+        <div class="trigger-btn" @click="togglePanel" @mouseenter="!isMobile() && handleTriggerEnter" @mouseleave="!isMobile() && handleTriggerLeave"
             :class="{ 'active': visible }">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="bell-icon">
                 <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
@@ -14,7 +14,7 @@
 
         <!-- 下拉面板 -->
         <transition name="fade-scale">
-            <div v-show="visible" class="dropdown-panel" :class="{ 'expanded': selectedTab }" @mouseenter="handlePanelEnter" @mouseleave="handlePanelLeave"
+            <div v-show="visible" class="dropdown-panel" :class="{ 'expanded': selectedTab }" @mouseenter="!isMobile() && handlePanelEnter" @mouseleave="!isMobile() && handlePanelLeave"
                 @click.stop>
 
                 <!-- 左侧导航栏 -->
@@ -142,6 +142,10 @@ import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { getUnreadCountApi, clearUnreadApi } from '../api/notification'
 import { useUserStore } from '../stores/user'
 import MessageToast from './MessageToast.vue'
+
+const isMobile = () => {
+    return window.innerWidth <= 768
+}
 
 const userStore = useUserStore()
 const visible = ref(false)
@@ -354,7 +358,8 @@ const initWebSocket = () => {
     if (!userId) return
     if (ws.value?.readyState === WebSocket.OPEN) return
 
-    const url = `ws://localhost:8080/ws/${userId}`
+    // const url = `ws://localhost:8080/ws/${userId}`
+    const url = `ws://8.163.60.181:8080/ws/${userId}`
     ws.value = new WebSocket(url)
 
     ws.value.onopen = () => {

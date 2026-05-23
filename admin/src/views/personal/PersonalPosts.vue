@@ -23,7 +23,7 @@
                         </svg>
                         <span>{{ formatNumber(post.viewCount) }}</span>
                     </div>
-                    <div v-else class="like-count-badge" @click.stop="handleLike(post, $event)">
+                    <div v-else class="like-count-badge" @click.stop="debouncedHandleLike(post, $event)">
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" 
                             :fill="post.isLiked ? 'currentColor' : 'none'"
                             :class="{ 'liked': post.isLiked }"
@@ -89,6 +89,7 @@ import { getMyPostListApi, getUserPostListApi, viewPostApi, likePostApi, deleteP
 import { useUserStore } from '../../stores/user.js'
 import { ElMessage } from 'element-plus'
 import ConfirmDialog from '../../components/ConfirmDialog.vue'
+import { debounce } from '../../utils/debounce.js'
 
 const route = useRoute()
 const userStore = useUserStore()
@@ -207,6 +208,8 @@ const handleLike = async (post, event) => {
         post.likeCount = originalLikeCount
     }
 }
+
+const debouncedHandleLike = debounce(handleLike, 500)
 
 // 处理编辑
 const handleEdit = (post) => {

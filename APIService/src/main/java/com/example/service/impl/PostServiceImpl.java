@@ -28,10 +28,14 @@ import com.example.vo.post.PostVO;
 import com.example.vo.user.UserLoginVO;
 import com.example.vo.user.UserPostListVO;
 import jakarta.annotation.Resource;
+import org.springframework.data.redis.core.RedisOperations;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.SessionCallback;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.dao.DataAccessException;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -39,6 +43,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -65,6 +70,114 @@ public class PostServiceImpl implements PostService {
     @Resource
     private UploadService uploadService;
 
+    @Resource
+    private RedisTemplate<String, Object> redisTemplate;
+
+    private static final String USER_LIKED_POSTS_KEY = "user:liked:posts:";
+    private static final String USER_FAVORITED_POSTS_KEY = "user:favorited:posts:";
+
+    private Set<Object> getLikedPostIdsFromRedis(Long userId) {
+        try {
+            String key = USER_LIKED_POSTS_KEY + userId;
+            Set<Object> likedPostIds = redisTemplate.opsForSet().members(key);
+            
+            // 如果Redis中没有数据（可能Redis重启或数据丢失），从数据库加载
+            if (likedPostIds == null || likedPostIds.isEmpty()) {
+                likedPostIds = loadUserLikedPostsToRedis(userId, key);
+            }
+            
+            return likedPostIds;
+        } catch (Exception e) {
+            // Redis异常时降级到数据库查询
+            System.err.println("Redis获取点赞数据失败，降级到数据库查询: " + e.getMessage());
+            return getLikedPostIdsFromDatabase(userId);
+        }
+    }
+
+    private Set<Object> getFavoritedPostIdsFromRedis(Long userId) {
+        try {
+            String key = USER_FAVORITED_POSTS_KEY + userId;
+            Set<Object> favoritedPostIds = redisTemplate.opsForSet().members(key);
+            
+            // 如果Redis中没有数据（可能Redis重启或数据丢失），从数据库加载
+            if (favoritedPostIds == null || favoritedPostIds.isEmpty()) {
+                favoritedPostIds = loadUserFavoritedPostsToRedis(userId, key);
+            }
+            
+            return favoritedPostIds;
+        } catch (Exception e) {
+            // Redis异常时降级到数据库查询
+            System.err.println("Redis获取收藏数据失败，降级到数据库查询: " + e.getMessage());
+            return getFavoritedPostIdsFromDatabase(userId);
+        }
+    }
+
+    private Set<Object> loadUserLikedPostsToRedis(Long userId, String key) {
+        try {
+            List<Long> likedPostIds = postLikeMapper.selectAllLikedPostIdsByUserId(userId);
+            if (likedPostIds != null && !likedPostIds.isEmpty()) {
+                Set<String> likedPostIdStrs = likedPostIds.stream()
+                        .map(String::valueOf)
+                        .collect(Collectors.toSet());
+                redisTemplate.opsForSet().add(key, likedPostIdStrs.toArray());
+                redisTemplate.expire(key, 7, TimeUnit.DAYS);
+                return new HashSet<>(likedPostIdStrs);
+            }
+            return new HashSet<>();
+        } catch (Exception e) {
+            System.err.println("从数据库加载点赞数据到Redis失败: " + e.getMessage());
+            return new HashSet<>();
+        }
+    }
+
+    private Set<Object> loadUserFavoritedPostsToRedis(Long userId, String key) {
+        try {
+            List<Long> favoritedPostIds = favoriteMapper.selectAllCollectedPostIdsByUserId(userId);
+            if (favoritedPostIds != null && !favoritedPostIds.isEmpty()) {
+                Set<String> favoritedPostIdStrs = favoritedPostIds.stream()
+                        .map(String::valueOf)
+                        .collect(Collectors.toSet());
+                redisTemplate.opsForSet().add(key, favoritedPostIdStrs.toArray());
+                redisTemplate.expire(key, 7, TimeUnit.DAYS);
+                return new HashSet<>(favoritedPostIdStrs);
+            }
+            return new HashSet<>();
+        } catch (Exception e) {
+            System.err.println("从数据库加载收藏数据到Redis失败: " + e.getMessage());
+            return new HashSet<>();
+        }
+    }
+
+    private Set<Object> getLikedPostIdsFromDatabase(Long userId) {
+        try {
+            List<Long> likedPostIds = postLikeMapper.selectAllLikedPostIdsByUserId(userId);
+            if (likedPostIds != null) {
+                return new HashSet<>(likedPostIds.stream()
+                        .map(String::valueOf)
+                        .collect(Collectors.toSet()));
+            }
+            return new HashSet<>();
+        } catch (Exception e) {
+            System.err.println("从数据库查询点赞数据失败: " + e.getMessage());
+            return new HashSet<>();
+        }
+    }
+
+    private Set<Object> getFavoritedPostIdsFromDatabase(Long userId) {
+        try {
+            List<Long> favoritedPostIds = favoriteMapper.selectAllCollectedPostIdsByUserId(userId);
+            if (favoritedPostIds != null) {
+                return new HashSet<>(favoritedPostIds.stream()
+                        .map(String::valueOf)
+                        .collect(Collectors.toSet()));
+            }
+            return new HashSet<>();
+        } catch (Exception e) {
+            System.err.println("从数据库查询收藏数据失败: " + e.getMessage());
+            return new HashSet<>();
+        }
+    }
+
     @Override
     public PostVO getPostById(Long postId) {
         Post post = postMapper.selectById(postId);
@@ -78,8 +191,17 @@ public class PostServiceImpl implements PostService {
 
         Long userId = UserContext.getUserId();
         if (userId != null) {
-            postVO.setIsLiked(postLikeMapper.selectByUserIdAndPostId(userId, postId) != null);
-            postVO.setIsCollected(favoriteMapper.selectByUserIdAndPostId(userId, postId) != null);
+            Set<Object> likedPostIdSet = getLikedPostIdsFromRedis(userId);
+            boolean isLiked = likedPostIdSet != null && 
+                    likedPostIdSet.stream()
+                            .anyMatch(id -> id.toString().equals(postId.toString()));
+            postVO.setIsLiked(isLiked);
+            
+            Set<Object> favoritedPostIdSet = getFavoritedPostIdsFromRedis(userId);
+            boolean isCollected = favoritedPostIdSet != null && 
+                    favoritedPostIdSet.stream()
+                            .anyMatch(id -> id.toString().equals(postId.toString()));
+            postVO.setIsCollected(isCollected);
         }else {
             postVO.setIsLiked(false);
             postVO.setIsCollected(false);
@@ -121,16 +243,25 @@ public class PostServiceImpl implements PostService {
 
         if (list != null && !list.isEmpty()) {
             if (userId != null) {
-                List<Long> postIds = list.stream()
-                        .map(PostVO::getId)
-                        .collect(Collectors.toList());
+                Set<Object> likedPostIds = getLikedPostIdsFromRedis(userId);
+                Set<Long> likedSet = new HashSet<>();
+                if (likedPostIds != null) {
+                    likedSet = likedPostIds.stream()
+                            .map(obj -> Long.valueOf(obj.toString()))
+                            .collect(Collectors.toSet());
+                }
 
-                Set<Long> likedSet = new HashSet<>(postLikeMapper.selectLikedPostIdsByUser(userId, postIds));
-                Set<Long> collectedSet = new HashSet<>(favoriteMapper.selectCollectedPostIdsByUser(userId, postIds));
+                Set<Object> favoritedPostIds = getFavoritedPostIdsFromRedis(userId);
+                Set<Long> favoritedSet = new HashSet<>();
+                if (favoritedPostIds != null) {
+                    favoritedSet = favoritedPostIds.stream()
+                            .map(obj -> Long.valueOf(obj.toString()))
+                            .collect(Collectors.toSet());
+                }
 
                 for (PostVO vo : list) {
                     vo.setIsLiked(likedSet.contains(vo.getId()));
-                    vo.setIsCollected(collectedSet.contains(vo.getId()));
+                    vo.setIsCollected(favoritedSet.contains(vo.getId()));
                 }
             } else {
                 for (PostVO vo : list) {
@@ -214,92 +345,187 @@ public class PostServiceImpl implements PostService {
     @Override
     public boolean addOrCancelLike(@RequestParam Long postId) {
         Long userId = GlobalCheckUtil.checkLogin();
-        Post post = postMapper.selectById(postId);
-        GlobalCheckUtil.checkNotNull(post, ResultCode.POST_NOT_EXIST);
+        
+        // 使用Redis分布式锁防止重复点击
+        String lockKey = "like:lock:" + userId + ":" + postId;
+        Boolean lockAcquired = redisTemplate.opsForValue().setIfAbsent(lockKey, "1", 3, TimeUnit.SECONDS);
+        if (lockAcquired == null || !lockAcquired) {
+            throw new RuntimeException("操作过于频繁，请稍后再试");
+        }
+        
+        try {
+            Post post = postMapper.selectById(postId);
+            GlobalCheckUtil.checkNotNull(post, ResultCode.POST_NOT_EXIST);
 
-        PostLike postLike = postLikeMapper.selectByUserIdAndPostId(userId, postId);
-        if (postLike != null) {
-            //取消点赞
-            int deleteRows = postLikeMapper.deleteById(postLike.getId());
-            GlobalCheckUtil.checkRowAffect(deleteRows, ResultCode.POST_LIKE_CANCEL_FAILED);
-            //帖子点赞数-1
-            int updateRows = postMapper.decreaseLikeCount(postId);
-            GlobalCheckUtil.checkRowAffect(updateRows, ResultCode.POST_LIKE_CANCEL_FAILED);
+            PostLike postLike = postLikeMapper.selectByUserIdAndPostId(userId, postId);
+            if (postLike != null) {
+                //取消点赞
+                int deleteRows = postLikeMapper.deleteById(postLike.getId());
+                GlobalCheckUtil.checkRowAffect(deleteRows, ResultCode.POST_LIKE_CANCEL_FAILED);
+                //帖子点赞数-1
+                int updateRows = postMapper.decreaseLikeCount(postId);
+                GlobalCheckUtil.checkRowAffect(updateRows, ResultCode.POST_LIKE_CANCEL_FAILED);
 
-            //发布该帖子的用户获赞数-1
-            int updateUserRows = userMapper.decreaseLikeCount(post.getUserId());
-            GlobalCheckUtil.checkRowAffect(updateUserRows, ResultCode.POST_LIKE_CANCEL_FAILED);
-            return false;
-        } else {
-            //点赞
-            PostLike newpostLike = new PostLike();
-            newpostLike.setUserId(userId);
-            newpostLike.setPostId(postId);
-            int insertRows = postLikeMapper.insert(newpostLike);
-            GlobalCheckUtil.checkRowAffect(insertRows, ResultCode.POST_LIKE_ADD_FAILED);
-            //帖子点赞数+1
-            int updateRows = postMapper.increaseLikeCount(postId);
-            GlobalCheckUtil.checkRowAffect(updateRows, ResultCode.POST_LIKE_ADD_FAILED);
-            //发布该帖子的用户获赞数+1
-            int updateUserRows = userMapper.increaseLikeCount(post.getUserId());
-            GlobalCheckUtil.checkRowAffect(updateUserRows, ResultCode.POST_LIKE_ADD_FAILED);
+                //发布该帖子的用户获赞数-1
+                int updateUserRows = userMapper.decreaseLikeCount(post.getUserId());
+                GlobalCheckUtil.checkRowAffect(updateUserRows, ResultCode.POST_LIKE_CANCEL_FAILED);
+                
+                // 同步更新Redis：移除点赞的帖子ID（使用SessionCallback保证原子性）
+                try {
+                    String likeKey = USER_LIKED_POSTS_KEY + userId;
+                    redisTemplate.execute(new SessionCallback<Object>() {
+                        @Override
+                        public Object execute(RedisOperations operations) throws DataAccessException {
+                            operations.multi();
+                            operations.opsForSet().remove(likeKey, postId.toString());
+                            operations.expire(likeKey, 7, TimeUnit.DAYS);
+                            return operations.exec();
+                        }
+                    });
+                } catch (Exception e) {
+                    System.err.println("Redis更新点赞状态失败: " + e.getMessage());
+                    throw new RuntimeException("Redis更新点赞状态失败，事务回滚", e);
+                }
+                
+                return false;
+            } else {
+                //点赞
+                PostLike newpostLike = new PostLike();
+                newpostLike.setUserId(userId);
+                newpostLike.setPostId(postId);
+                int insertRows = postLikeMapper.insert(newpostLike);
+                GlobalCheckUtil.checkRowAffect(insertRows, ResultCode.POST_LIKE_ADD_FAILED);
+                //帖子点赞数+1
+                int updateRows = postMapper.increaseLikeCount(postId);
+                GlobalCheckUtil.checkRowAffect(updateRows, ResultCode.POST_LIKE_ADD_FAILED);
+                //发布该帖子的用户获赞数+1
+                int updateUserRows = userMapper.increaseLikeCount(post.getUserId());
+                GlobalCheckUtil.checkRowAffect(updateUserRows, ResultCode.POST_LIKE_ADD_FAILED);
 
-            // ============== 发送通知消息 ==============
-            if (!post.getUserId().equals(userId)) {
-                NotificationMessageDTO dto = new NotificationMessageDTO();
-                dto.setUserId(post.getUserId());
-                dto.setFromUserId(userId);
-                dto.setType(NotificationType.POST_LIKE.getCode());
-                dto.setPostId(postId);
-                dto.setContent(NotificationType.buildContent(dto.getType(), userId));
-                noticeProducer.send(dto);
+                // 同步更新Redis：添加点赞的帖子ID（使用SessionCallback保证原子性）
+                try {
+                    String likeKey = USER_LIKED_POSTS_KEY + userId;
+                    redisTemplate.execute(new SessionCallback<Object>() {
+                        @Override
+                        public Object execute(RedisOperations operations) throws DataAccessException {
+                            operations.multi();
+                            operations.opsForSet().add(likeKey, postId.toString());
+                            operations.expire(likeKey, 7, TimeUnit.DAYS);
+                            return operations.exec();
+                        }
+                    });
+                } catch (Exception e) {
+                    System.err.println("Redis更新点赞状态失败: " + e.getMessage());
+                    throw new RuntimeException("Redis更新点赞状态失败，事务回滚", e);
+                }
+
+                // ============== 发送通知消息 ==============
+                if (!post.getUserId().equals(userId)) {
+                    NotificationMessageDTO dto = new NotificationMessageDTO();
+                    dto.setUserId(post.getUserId());
+                    dto.setFromUserId(userId);
+                    dto.setType(NotificationType.POST_LIKE.getCode());
+                    dto.setPostId(postId);
+                    dto.setContent(NotificationType.buildContent(dto.getType(), userId));
+                    noticeProducer.send(dto);
+                }
+
+                return true;
             }
-
-            return true;
+        } finally {
+            // 释放分布式锁
+            redisTemplate.delete(lockKey);
         }
     }
 
     @Override
     public boolean addOrCancelFavorite(@RequestParam Long postId) {
         Long userId = GlobalCheckUtil.checkLogin();
-        Post post = postMapper.selectById(postId);
-        GlobalCheckUtil.checkNotNull(post, ResultCode.POST_NOT_EXIST);
+        
+        // 使用Redis分布式锁防止重复点击
+        String lockKey = "favorite:lock:" + userId + ":" + postId;
+        Boolean lockAcquired = redisTemplate.opsForValue().setIfAbsent(lockKey, "1", 3, TimeUnit.SECONDS);
+        if (lockAcquired == null || !lockAcquired) {
+            throw new RuntimeException("操作过于频繁，请稍后再试");
+        }
+        
+        try {
+            Post post = postMapper.selectById(postId);
+            GlobalCheckUtil.checkNotNull(post, ResultCode.POST_NOT_EXIST);
 
-        Favorite favorite = favoriteMapper.selectByUserIdAndPostId(userId, postId);
-        if (favorite != null) {
-            //取消收藏
-            int deleteRows = favoriteMapper.deleteById(favorite.getId());
-            GlobalCheckUtil.checkRowAffect(deleteRows, ResultCode.POST_FAVORITE_CANCEL_FAILED);
+            Favorite favorite = favoriteMapper.selectByUserIdAndPostId(userId, postId);
+            if (favorite != null) {
+                //取消收藏
+                int deleteRows = favoriteMapper.deleteById(favorite.getId());
+                GlobalCheckUtil.checkRowAffect(deleteRows, ResultCode.POST_FAVORITE_CANCEL_FAILED);
 
-            //收藏数-1
-            int updateRows = postMapper.decreaseCollectCount(postId);
-            GlobalCheckUtil.checkRowAffect(updateRows, ResultCode.POST_FAVORITE_CANCEL_FAILED);
+                //收藏数-1
+                int updateRows = postMapper.decreaseCollectCount(postId);
+                GlobalCheckUtil.checkRowAffect(updateRows, ResultCode.POST_FAVORITE_CANCEL_FAILED);
 
-            return false;
-        } else {
-            //收藏
-            Favorite newfavorite = new Favorite();
-            newfavorite.setUserId(userId);
-            newfavorite.setPostId(postId);
-            int insertRows = favoriteMapper.insert(newfavorite);
-            GlobalCheckUtil.checkRowAffect(insertRows, ResultCode.POST_FAVORITE_ADD_FAILED);
+                // 同步更新Redis：移除收藏的帖子ID（使用SessionCallback保证原子性）
+                try {
+                    String favoriteKey = USER_FAVORITED_POSTS_KEY + userId;
+                    redisTemplate.execute(new SessionCallback<Object>() {
+                        @Override
+                        public Object execute(RedisOperations operations) throws DataAccessException {
+                            operations.multi();
+                            operations.opsForSet().remove(favoriteKey, postId.toString());
+                            operations.expire(favoriteKey, 7, TimeUnit.DAYS);
+                            return operations.exec();
+                        }
+                    });
+                } catch (Exception e) {
+                    System.err.println("Redis更新收藏状态失败: " + e.getMessage());
+                    throw new RuntimeException("Redis更新收藏状态失败，事务回滚", e);
+                }
+
+                return false;
+            } else {
+                //收藏
+                Favorite newfavorite = new Favorite();
+                newfavorite.setUserId(userId);
+                newfavorite.setPostId(postId);
+                int insertRows = favoriteMapper.insert(newfavorite);
+                GlobalCheckUtil.checkRowAffect(insertRows, ResultCode.POST_FAVORITE_ADD_FAILED);
 
 
-            int updateRows = postMapper.increaseCollectCount(postId);
-            GlobalCheckUtil.checkRowAffect(updateRows, ResultCode.POST_FAVORITE_ADD_FAILED);
+                int updateRows = postMapper.increaseCollectCount(postId);
+                GlobalCheckUtil.checkRowAffect(updateRows, ResultCode.POST_FAVORITE_ADD_FAILED);
 
-            // ============== 发送通知消息 ==============
-            if (!post.getUserId().equals(userId)) {
-                NotificationMessageDTO dto = new NotificationMessageDTO();
-                dto.setUserId(post.getUserId());
-                dto.setFromUserId(userId);
-                dto.setType(NotificationType.COLLECT.getCode());
-                dto.setPostId(postId);
-                dto.setContent(NotificationType.buildContent(dto.getType(), userId));
-                noticeProducer.send(dto);
+                // 同步更新Redis：添加收藏的帖子ID（使用SessionCallback保证原子性）
+                try {
+                    String favoriteKey = USER_FAVORITED_POSTS_KEY + userId;
+                    redisTemplate.execute(new SessionCallback<Object>() {
+                        @Override
+                        public Object execute(RedisOperations operations) throws DataAccessException {
+                            operations.multi();
+                            operations.opsForSet().add(favoriteKey, postId.toString());
+                            operations.expire(favoriteKey, 7, TimeUnit.DAYS);
+                            return operations.exec();
+                        }
+                    });
+                } catch (Exception e) {
+                    System.err.println("Redis更新收藏状态失败: " + e.getMessage());
+                    throw new RuntimeException("Redis更新收藏状态失败，事务回滚", e);
+                }
+
+                // ============== 发送通知消息 ==============
+                if (!post.getUserId().equals(userId)) {
+                    NotificationMessageDTO dto = new NotificationMessageDTO();
+                    dto.setUserId(post.getUserId());
+                    dto.setFromUserId(userId);
+                    dto.setType(NotificationType.COLLECT.getCode());
+                    dto.setPostId(postId);
+                    dto.setContent(NotificationType.buildContent(dto.getType(), userId));
+                    noticeProducer.send(dto);
+                }
+
+                return true;
             }
-
-            return true;
+        } finally {
+            // 释放分布式锁
+            redisTemplate.delete(lockKey);
         }
     }
 
@@ -333,12 +559,25 @@ public class PostServiceImpl implements PostService {
 
         Long currentUserId = UserContext.getUserId();
         if (list != null && !list.isEmpty() && currentUserId != null) {
-            List<Long> postIds = list.stream().map(PostVO::getId).collect(Collectors.toList());
-            Set<Long> likedSet = new HashSet<>(postLikeMapper.selectLikedPostIdsByUser(currentUserId, postIds));
-            Set<Long> collectedSet = new HashSet<>(favoriteMapper.selectCollectedPostIdsByUser(currentUserId, postIds));
+            Set<Object> likedPostIdSet = getLikedPostIdsFromRedis(currentUserId);
+            Set<Long> likedSet = new HashSet<>();
+            if (likedPostIdSet != null) {
+                likedSet = likedPostIdSet.stream()
+                        .map(obj -> Long.valueOf(obj.toString()))
+                        .collect(Collectors.toSet());
+            }
+            
+            Set<Object> favoritedPostIdSet = getFavoritedPostIdsFromRedis(currentUserId);
+            Set<Long> favoritedSet = new HashSet<>();
+            if (favoritedPostIdSet != null) {
+                favoritedSet = favoritedPostIdSet.stream()
+                        .map(obj -> Long.valueOf(obj.toString()))
+                        .collect(Collectors.toSet());
+            }
+            
             for (PostVO vo : list) {
                 vo.setIsLiked(likedSet.contains(vo.getId()));
-                vo.setIsCollected(collectedSet.contains(vo.getId()));
+                vo.setIsCollected(favoritedSet.contains(vo.getId()));
             }
         } else if (list != null && !list.isEmpty()) {
             for (PostVO vo : list) {
@@ -386,12 +625,25 @@ public class PostServiceImpl implements PostService {
 
         Long currentUserId = UserContext.getUserId();
         if (list != null && !list.isEmpty() && currentUserId != null) {
-            List<Long> postIds = list.stream().map(PostVO::getId).collect(Collectors.toList());
-            Set<Long> likedSet = new HashSet<>(postLikeMapper.selectLikedPostIdsByUser(currentUserId, postIds));
-            Set<Long> collectedSet = new HashSet<>(favoriteMapper.selectCollectedPostIdsByUser(currentUserId, postIds));
+            Set<Object> likedPostIdSet = getLikedPostIdsFromRedis(currentUserId);
+            Set<Long> likedSet = new HashSet<>();
+            if (likedPostIdSet != null) {
+                likedSet = likedPostIdSet.stream()
+                        .map(obj -> Long.valueOf(obj.toString()))
+                        .collect(Collectors.toSet());
+            }
+            
+            Set<Object> favoritedPostIdSet = getFavoritedPostIdsFromRedis(currentUserId);
+            Set<Long> favoritedSet = new HashSet<>();
+            if (favoritedPostIdSet != null) {
+                favoritedSet = favoritedPostIdSet.stream()
+                        .map(obj -> Long.valueOf(obj.toString()))
+                        .collect(Collectors.toSet());
+            }
+            
             for (PostVO vo : list) {
                 vo.setIsLiked(likedSet.contains(vo.getId()));
-                vo.setIsCollected(collectedSet.contains(vo.getId()));
+                vo.setIsCollected(favoritedSet.contains(vo.getId()));
             }
         } else if (list != null && !list.isEmpty()) {
             for (PostVO vo : list) {

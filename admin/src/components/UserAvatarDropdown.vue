@@ -1,5 +1,5 @@
 <template>
-    <div class="user-avatar-dropdown" :class="{ 'compact': compact }" @mouseenter="isOpen = true" @mouseleave="isOpen = false">
+    <div class="user-avatar-dropdown" :class="{ 'compact': compact }" @mouseenter="!isMobile() && (isOpen = true)" @mouseleave="!isMobile() && (isOpen = false)">
         <div class="avatar-wrapper" @click="handleAvatarClick">
             <div class="avatar-container">
                 <div class="avatar-glow"></div>
@@ -160,12 +160,21 @@ const isOpen = ref(false)
 const avatar = computed(() => userStore.userInfo?.avatar || 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png')
 const nickname = computed(() => userStore.userInfo?.nickname || '登录')
 
+const isMobile = () => {
+    return window.innerWidth <= 768
+}
+
 const handleAvatarClick = () => {
     if (!userStore.isLoggedIn) {
         appStore.openLoginModal()
         return
     }
-    window.open('/personalHome', '_blank')
+    
+    if (isMobile()) {
+        isOpen.value = !isOpen.value
+    } else {
+        window.open('/personalHome', '_blank')
+    }
 }
 
 const handleMenuClick = (path) => {

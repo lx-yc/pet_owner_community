@@ -22,4 +22,7 @@ public interface PostLikeMapper {
 
     // 获取用户点赞的帖子ID列表（游标分页）
     List<Long> selectLikedPostIdsByUserId(@Param("userId") Long userId, @Param("lastId") Long lastId, @Param("pageSize") Integer pageSize);
+
+    // 获取用户所有点赞的帖子ID列表（用于登录时加载到Redis）
+    List<Long> selectAllLikedPostIdsByUserId(@Param("userId") Long userId);
 }

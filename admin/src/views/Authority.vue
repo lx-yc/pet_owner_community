@@ -91,7 +91,7 @@
 
                                 <!-- 点赞数 (添加点击事件和动态样式) -->
                                 <span class="stat-item like-item" :class="{ 'active': post.isLiked }"
-                                    @click.stop="handleLike(post, $event)">
+                                    @click.stop="debouncedHandleLike(post, $event)">
                                     <svg class="icon" viewBox="0 0 24 24" :fill="post.isLiked ? 'currentColor' : 'none'"
                                         stroke="currentColor" stroke-width="2">
                                         <path
@@ -114,7 +114,7 @@
 
                                 <!-- 收藏量 (添加点击事件和动态样式) -->
                                 <span class="stat-item collect-item" :class="{ 'active': post.isCollected }"
-                                    @click.stop="handleCollect(post, $event)">
+                                    @click.stop="debouncedHandleCollect(post, $event)">
                                     <svg class="icon" viewBox="0 0 24 24"
                                         :fill="post.isCollected ? 'currentColor' : 'none'" stroke="currentColor"
                                         stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -156,6 +156,7 @@ import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import { useAppStore } from '../stores/app'
 import { ElMessage } from 'element-plus'
+import { debounce } from '../utils/debounce.js'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -306,6 +307,8 @@ const handleLike = async (post, event) => {
     }
 }
 
+const debouncedHandleLike = debounce(handleLike, 500)
+
 const handleCollect = async (post, event) => {
     event.stopPropagation()
     if (!userStore.isLoggedIn) {
@@ -330,6 +333,8 @@ const handleCollect = async (post, event) => {
     }
 }
 
+const debouncedHandleCollect = debounce(handleCollect, 500)
+
 const handlePostClick = async (post) => {
     viewPostApi(post.id).catch(err => {
         console.warn('浏览计数上报失败:', err)
@@ -353,6 +358,20 @@ onUnmounted(() => {
     min-height: 100vh;
     background: linear-gradient(to bottom, #f8fafc 0%, #f1f5f9 100%);
     padding-bottom: 60px;
+    /* padding-top: 80px; */
+}
+
+/* 移动端适配 */
+@media screen and (max-width: 768px) {
+    .authority-page {
+        padding-top: 70px;
+    }
+}
+
+@media screen and (max-width: 480px) {
+    .authority-page {
+        padding-top: 60px;
+    }
 }
 
 .page-header {

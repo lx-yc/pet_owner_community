@@ -16,7 +16,7 @@
                         </div>
                     </template>
                     <!-- 左下角点赞按钮 -->
-                    <div class="like-count-badge" @click.stop="handleLikeClick(post, $event)">
+                    <div class="like-count-badge" @click.stop="debouncedHandleLikeClick(post, $event)">
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" 
                             :fill="post.isLiked ? 'currentColor' : 'none'"
                             :class="{ 'liked': post.isLiked }"
@@ -52,6 +52,7 @@ import { ref, onMounted, computed, inject, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { getMyFavoriteListApi, getUserFavoriteListApi, viewPostApi, likePostApi } from '../../api/post.js'
 import { useUserStore } from '../../stores/user.js'
+import { debounce } from '../../utils/debounce.js'
 
 const route = useRoute()
 const userStore = useUserStore()
@@ -167,6 +168,8 @@ const handleLikeClick = async (post, event) => {
         post.likeCount = originalLikeCount
     }
 }
+
+const debouncedHandleLikeClick = debounce(handleLikeClick, 500)
 
 // 设置IntersectionObserver监听
 const setupObserver = () => {

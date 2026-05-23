@@ -82,9 +82,9 @@ public class NoticeConsumer {
                 // 发送 JSON 字符串
                 session.getAsyncRemote().sendText(jsonMsg);
 
-                System.out.println("【DEBUG】已向用户" + userId + " 推送 JSON 消息: " + jsonMsg);
+//                System.out.println("【DEBUG】已向用户" + userId + " 推送 JSON 消息: " + jsonMsg);
             } else {
-                System.out.println("【DEBUG】用户" + userId + " 不在线或 Session 无效，跳过推送");
+//                System.out.println("【DEBUG】用户" + userId + " 不在线或 Session 无效，跳过推送");
             }
         } catch (Exception e) {
             e.printStackTrace();

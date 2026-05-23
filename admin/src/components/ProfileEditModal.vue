@@ -177,7 +177,7 @@
 import { ref, reactive, watch, computed } from 'vue';
 import { useUserStore } from '../stores/user';
 import { updateUserInfoApi } from '../api/user';
-import { uploadImageApi } from '../api/upload';
+import { uploadImageApi, deleteImageApi } from '../api/upload';
 import { ElMessage } from 'element-plus';
 
 const props = defineProps({
@@ -193,6 +193,7 @@ const userStore = useUserStore();
 const avatarInput = ref(null);
 const saving = ref(false);
 const defaultAvatar = '';
+const originalAvatar = ref('');
 
 const moodOptions = [
     { value: '开心', emoji: '😊', label: '开心' },
@@ -221,6 +222,7 @@ watch(() => props.visible, (val) => {
     if (val && userStore.userInfo) {
         formData.nickname = userStore.userInfo.nickname || '';
         formData.avatar = userStore.userInfo.avatar || '';
+        originalAvatar.value = userStore.userInfo.avatar || '';
         formData.signature = userStore.userInfo.signature || '';
         formData.phone = userStore.userInfo.phone || '';
         formData.email = userStore.userInfo.email || '';
@@ -302,6 +304,17 @@ const handleSave = async () => {
                 moodStatus: formData.moodStatus,
                 mentalTag: formData.mentalTag
             });
+
+            // 如果头像有变化，删除旧头像
+            if (formData.avatar !== originalAvatar.value && originalAvatar.value) {
+                try {
+                    await deleteImageApi(originalAvatar.value);
+                    console.log('旧头像删除成功');
+                } catch (err) {
+                    console.error('删除旧头像失败:', err);
+                    // 即使删除失败也不影响保存结果
+                }
+            }
 
             ElMessage.success('资料修改成功');
             emit('saved');

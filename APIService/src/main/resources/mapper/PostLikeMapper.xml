@@ -44,4 +44,12 @@
         ORDER BY post_id DESC
         LIMIT #{pageSize}
     </select>
+
+    <!-- 获取用户所有点赞的帖子ID列表（用于登录时加载到Redis） -->
+    <select id="selectAllLikedPostIdsByUserId" resultType="java.lang.Long">
+        SELECT post_id
+        FROM post_like
+        WHERE user_id = #{userId}
+        ORDER BY post_id DESC
+    </select>
 </mapper>

@@ -110,7 +110,7 @@
 
                                 <!-- 点赞量 (点击事件 + 动态样式) -->
                                 <span class="stat-item like-item" :class="{ 'active': post.isLiked }"
-                                    @click.stop="handleLike(post, $event)">
+                                    @click.stop="debouncedHandleLike(post, $event)">
                                     <svg class="icon" viewBox="0 0 24 24" :fill="post.isLiked ? 'currentColor' : 'none'"
                                         stroke="currentColor" stroke-width="2">
                                         <path
@@ -133,7 +133,7 @@
 
                                 <!-- 收藏量 (点击事件 + 动态样式) -->
                                 <span class="stat-item collect-item" :class="{ 'active': post.isCollected }"
-                                    @click.stop="handleCollect(post, $event)">
+                                    @click.stop="debouncedHandleCollect(post, $event)">
                                     <svg class="icon" viewBox="0 0 24 24"
                                         :fill="post.isCollected ? 'currentColor' : 'none'" stroke="currentColor"
                                         stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -172,6 +172,7 @@ import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import { useAppStore } from '../stores/app'
 import { ElMessage } from 'element-plus'
+import { debounce } from '../utils/debounce.js'
 
 const router = useRouter()
 const appStore = useAppStore()
@@ -339,6 +340,9 @@ const handleLike = async (post, event) => {
     }
 }
 
+// 使用防抖包装点赞函数（500ms延迟）
+const debouncedHandleLike = debounce(handleLike, 500)
+
 // 【新增】跳转到帖子详情并定位评论区
 const goToPostWithCommentScroll = (post) => {
     // 同样先上报浏览（可选，因为详情页也会上报，这里不上报也可以，避免重复）
@@ -380,6 +384,9 @@ const handleCollect = async (post, event) => {
         // ElMessage.error('操作失败，请重试')
     }
 }
+
+// 使用防抖包装收藏函数（500ms延迟）
+const debouncedHandleCollect = debounce(handleCollect, 500)
 
 const loadMorePosts = () => {
     fetchPosts(true)
